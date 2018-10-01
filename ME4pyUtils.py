@@ -147,9 +147,13 @@ if __name__ == "__main__":
     """ 
     Test of the module    
     """
-   
-    n=np.ones(3)
+    import timeit 
     
+    
+    
+
+    
+    # Connect to matlab
     try:
         eng
     except NameError:
@@ -166,6 +170,7 @@ if __name__ == "__main__":
        
     
     # create matlab data
+    # ------------------------------------------------------------------------
     mf = eng.rand(3)
     mc = matlab.double([[1+1j, 0.3, 1j],[1.2j-1,0,1+1j]],is_complex=True)
     mi64 = matlab.int64([1,2,3])
@@ -173,6 +178,7 @@ if __name__ == "__main__":
     mb = matlab.logical([True,True,False])
     
     # Test conversion from matlab to numpy
+    # ------------------------------------------------------------------------    
     npf= mlarray2np(mf)
     npc = mlarray2np(mc)
     npi64= mlarray2np(mi64)
@@ -180,6 +186,7 @@ if __name__ == "__main__":
     npb = mlarray2np(mb)
     
     # Test conversion from numpy to matlab 
+    # ------------------------------------------------------------------------
     npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64)
     mc2 = np2mlarray(npc)
     mf2 = np2mlarray(npf)
@@ -187,6 +194,23 @@ if __name__ == "__main__":
     mb2 = np2mlarray(npb)
 
     # test orientation in the matlab workspace    
+    # ------------------------------------------------------------------------
     eng.workspace['mi']=mi64_2
     eng.workspace['mc2']=mc2
+
     # Test for speed
+    # ------------------------------------------------------------------------
+    print "Compare perf vs matlab.double(np_a.tolist())"
+    setup_np2mat = (
+    "import numpy as np\n"
+    "import matlab\n"
+    "import ME4pyUtils\n"
+    "import array\n"
+    "np_a=np.random.uniform(size=(1000))\n")
+    np_a=np.random.uniform(size=(1000))
+    tstd = timeit.timeit('mat_a = matlab.double(np_a.tolist())',setup=setup_np2mat,  number=1000)
+    tnew = timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=1000)
+    print(' >  matlab.double(np_a.tolist()) =' + str(tstd) + ' s')
+    print(' >  ME4pyUtils.np2mlarray(np_a)=' + str(tnew) + ' s')
+    
+    
