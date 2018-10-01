@@ -68,8 +68,8 @@ def mlarray2np(ma):
         # use test to define the type, few are missing like uint!!
         if mltype==('d',8): # double
             nptype = 'f8'
-        elif mltype==('B',1): # logical
-            nptype = 'b'
+        elif mltype==('B',1): # logical is given as a int
+            nptype = 'bool'
         elif mltype==('b',1): #int8
             nptype = 'i1'
         elif mltype==('i',4):
@@ -79,7 +79,7 @@ def mlarray2np(ma):
         elif mltype==('l',8): # int64
             nptype = 'i8'        
         else:
-            nptype = 'f8'
+            nptype = 'f8' #default
             
             
         # no copy with the buffer
@@ -88,6 +88,56 @@ def mlarray2np(ma):
     return npa
 
 
+
+def np2mlarray(npa):
+    """
+    Convert  numpy array to matlab
+    npa : must be a numpy ndarray and return (without copy for real case) a matlab mlarray
+    For now only double, double complex and int64 are
+    """
+
+    # check input type
+    if 'ndarray' not in str(type(npa)):
+        raise TypeError('Expected  numpy.ndarray. Got %s' % type(ma))
+    
+   
+    
+    # complex case
+    # =========================================================================
+    # create empty matlab.mlarray
+    if npa.dtype == np.complex128:
+         # convert to array
+         arr=np.asarray(npa.flatten('F').real)
+         ari=np.asarray(npa.flatten('F').imag)
+         ma= matlab.double(initializer=None, size=(1,len(arr)), is_complex=True)
+         # associate the data
+         ma._real=arr
+         ma._imag=ari
+         # reshape
+         ma.reshape(npa.shape)
+    
+    else:
+        
+        # real case
+        # =========================================================================
+        # convert to array
+        ar=np.asarray(npa.flatten('F'))
+        # create empty matlab.mlarray
+        if npa.dtype == np.float64:        
+            ma= matlab.double(initializer=None, size=(1,len(ar)), is_complex=False)
+        elif npa.dtype == np.int64:
+            ma= matlab.int64(initializer=None, size=(1,len(ar)))
+        elif npa.dtype == np.bool:
+            ma= matlab.logical(initializer=None, size=(1,len(ar)))
+        else:
+            raise TypeError('Type is missing')
+        
+        # assocaite data
+        ma._data=ar
+        # reshape
+        ma.reshape(npa.shape)
+    
+    return ma
 
 # ============================================================================
 #  M A I N
@@ -104,14 +154,20 @@ if __name__ == "__main__":
         eng
     except NameError:
          print('Run matlab engine...')
-         eng=matlab.engine.start_matlab()
+         if len(matlab.engine.find_matlab())==0:
+             #si aucune session share, run
+             eng=matlab.engine.start_matlab()
+         else:
+             # connect to a session
+             eng=matlab.engine.connect_matlab(matlab.engine.find_matlab()[0])
+             print('connected...')
     else:
          print('Matlab engine is already runnig...')
        
     
     # create matlab data
     mf = eng.rand(3)
-    mc = eng.cos(matlab.double([1+1j, 0.3, 1j],is_complex=True))
+    mc = matlab.double([[1+1j, 0.3, 1j],[1.2j-1,0,1+1j]],is_complex=True)
     mi64 = matlab.int64([1,2,3])
     mi8 = matlab.int8([1,2,3])
     mb = matlab.logical([True,True,False])
@@ -124,5 +180,13 @@ if __name__ == "__main__":
     npb = mlarray2np(mb)
     
     # Test conversion from numpy to matlab 
-    
+    npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64)
+    mc2 = np2mlarray(npc)
+    mf2 = np2mlarray(npf)
+    mi64_2 = np2mlarray(npi)   
+    mb2 = np2mlarray(npb)
+
+    # test orientation in the matlab workspace    
+    eng.workspace['mi']=mi64_2
+    eng.workspace['mc2']=mc2
     # Test for speed
