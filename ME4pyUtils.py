@@ -61,7 +61,7 @@ def mlarray2np(ma):
     # conversion using FROM BUFFER, need to be carefull with type
     if ma._is_complex==True:  
         nptype='f8'
-        npa = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size) + 1j*np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size)
+        npa = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size,order='F') + 1j*np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size,order='F')
     else:
         # tuple that define type
         mltype=(ma._data.typecode,ma._data.itemsize)
@@ -83,7 +83,7 @@ def mlarray2np(ma):
             
             
         # no copy with the buffer
-        npa = np.frombuffer(ma._data,dtype=nptype).reshape(ma.size)
+        npa = np.frombuffer(ma._data,dtype=nptype).reshape(ma.size,order='F')
         
     return npa
 
