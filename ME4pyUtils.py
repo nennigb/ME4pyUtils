@@ -17,6 +17,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
+
+
 import numpy as np
 import matlab.engine
 
@@ -93,7 +95,8 @@ def np2mlarray(npa):
     """
     Convert  numpy array to matlab
     npa : must be a numpy ndarray and return (without copy for real case) a matlab mlarray
-    For now only double, double complex and int64 are
+    For now only double, double complex and int64 and logical have been tested
+    based on https://stackoverflow.com/questions/34155829/how-to-efficiently-convert-matlab-engine-arrays-to-numpy-ndarray/34155926
     """
 
     # check input type
@@ -148,7 +151,7 @@ if __name__ == "__main__":
     Test of the module    
     """
     import timeit 
-    
+    speedtest=1
     
     
 
@@ -200,17 +203,37 @@ if __name__ == "__main__":
 
     # Test for speed
     # ------------------------------------------------------------------------
-    print "Compare perf vs matlab.double(np_a.tolist())"
-    setup_np2mat = (
-    "import numpy as np\n"
-    "import matlab\n"
-    "import ME4pyUtils\n"
-    "import array\n"
-    "np_a=np.random.uniform(size=(1000))\n")
-    np_a=np.random.uniform(size=(1000))
-    tstd = timeit.timeit('mat_a = matlab.double(np_a.tolist())',setup=setup_np2mat,  number=1000)
-    tnew = timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=1000)
-    print(' >  matlab.double(np_a.tolist()) =' + str(tstd) + ' s')
-    print(' >  ME4pyUtils.np2mlarray(np_a)=' + str(tnew) + ' s')
+    if speedtest==1:
+        print "Compare Numpy to matlab conversion strategy : (a bit long with several matlab.engine opening)"
+        setup_np2mat = (
+            "import numpy as np\n"
+            "import matlab\n"
+            "import ME4pyUtils\n"
+            "import array\n"
+            "np_a=np.random.uniform(size=(1000))\n")
+        print(' >  matlab.double(np_a.tolist()) =' +
+            str( timeit.timeit('mat_a = matlab.double(np_a.tolist())',setup=setup_np2mat,  number=1000)) + ' s')
+        print(' >  ME4pyUtils.np2mlarray(np_a)=' + 
+           str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=1000))+' s')
+        
+        
+        
+        
+        print ("\nCompare matlab to numpy conversition strategy :")
+        setup_tolist = (
+            "import numpy as np\n"
+            "import matlab\n"
+            "import ME4pyUtils\n"
+            "eng = matlab.engine.start_matlab()\n"
+            "mrd = eng.rand(matlab.int64([1,1000]),nargout=1)\n")
+        print (' > From np.array :' +
+            str( timeit.timeit('nprd = np.array(mrd,dtype = float) ',setup=setup_tolist,  number=1000)) +
+            ' s')
     
-    
+        print (' > From np.asarray [use _data] :' +
+            str( timeit.timeit('nprd = np.asarray(mrd._data,dtype = float) ',setup=setup_tolist,  number=1000)) +
+            ' s')
+        
+        print (' > From mlarray2np [use _data buffer]:' +
+            str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist,  number=1000)) +
+            ' s')
