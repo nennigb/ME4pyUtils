@@ -151,7 +151,7 @@ if __name__ == "__main__":
     Test of the module    
     """
     import timeit 
-    speedtest=1
+    speedtest=1   # set to 0 to avoid speed test
     
     
 
@@ -204,7 +204,7 @@ if __name__ == "__main__":
     # Test for speed
     # ------------------------------------------------------------------------
     if speedtest==1:
-        print "Compare Numpy to matlab conversion strategy : (a bit long with several matlab.engine opening)"
+        print( "Compare Numpy to matlab conversion strategy : (a bit long with several matlab.engine opening)")
         setup_np2mat = (
             "import numpy as np\n"
             "import matlab\n"
@@ -234,6 +234,6 @@ if __name__ == "__main__":
             str( timeit.timeit('nprd = np.asarray(mrd._data,dtype = float) ',setup=setup_tolist,  number=1000)) +
             ' s')
         
-        print (' > From mlarray2np [use _data buffer]:' +
+        print (' > From ME4pyUtils.mlarray2np [use _data buffer]:' +
             str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist,  number=1000)) +
             ' s')
