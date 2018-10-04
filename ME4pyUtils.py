@@ -150,12 +150,17 @@ def dict2sparse(K):
     contains the row (int64) and column index and the value (double or complex) 
     respectivelly
     """    
-    
+    # get shape
     shape=tuple(K['shape']._data)
-    Ksp = sparse.coo_matrix( ( ME4pyUtils.mlarray2np(K['s']).flatten(),
-                               (ME4pyUtils.mlarray2np(K['i']).flatten() -1 ,
-                                ME4pyUtils.mlarray2np(K['j']).flatten() -1  ) 
-                              ), shape=shape)
+    # -1 because matlab index start to 1
+    if len(K['i']._data)>1:
+        Ksp = sparse.coo_matrix( ( mlarray2np(K['s']).flatten(),
+                                   (mlarray2np(K['i']).flatten() -1 ,
+                                    mlarray2np(K['j']).flatten() -1  ) 
+                                  ), shape=shape)
+    else:
+        raise TypeError('The sparse matrix contain just one element and matlab returns just scalar...')
+                              
     return Ksp
 # ============================================================================
 #  M A I N
