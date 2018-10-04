@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 import numpy as np
+import scipy.sparse as sparse
 import matlab.engine
 
 def mlarray2np(ma):
@@ -141,7 +142,21 @@ def np2mlarray(npa):
         ma.reshape(npa.shape)
     
     return ma
-
+    
+    
+def dict2sparse(K):
+    """
+    Create a scipy sparse matrix using K dictionnary K['i'], K['j'] and K['s'] 
+    contains the row (int64) and column index and the value (double or complex) 
+    respectivelly
+    """    
+    
+    shape=tuple(K['shape']._data)
+    Ksp = sparse.coo_matrix( ( ME4pyUtils.mlarray2np(K['s']).flatten(),
+                               (ME4pyUtils.mlarray2np(K['i']).flatten() -1 ,
+                                ME4pyUtils.mlarray2np(K['j']).flatten() -1  ) 
+                              ), shape=shape)
+    return Ksp
 # ============================================================================
 #  M A I N
 # ============================================================================
@@ -151,7 +166,7 @@ if __name__ == "__main__":
     Test of the module    
     """
     import timeit 
-    speedtest=1   # set to 0 to avoid speed test
+    speedtest=0   # set to 0 to avoid speed test
     
     
 
@@ -200,7 +215,12 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------------
     eng.workspace['mi']=mi64_2
     eng.workspace['mc2']=mc2
-
+    
+    # test sparse matrix requiert Recast4py.m
+    K1,K2=eng.sptest(3.,nargout=2)
+    Ksp1=dict2sparse(K1)
+    Ksp2=dict2sparse(K2)
+    
     # Test for speed
     # ------------------------------------------------------------------------
     if speedtest==1:
