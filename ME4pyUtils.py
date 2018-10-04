@@ -146,7 +146,7 @@ def np2mlarray(npa):
     
 def dict2sparse(K):
     """
-    Create a scipy sparse matrix using K dictionnary K['i'], K['j'] and K['s'] 
+    Create a scipy sparse CSR matrix using K dictionnary K['i'], K['j'] and K['s'] 
     contains the row (int64) and column index and the value (double or complex) 
     respectivelly
     """    
@@ -157,10 +157,12 @@ def dict2sparse(K):
         Ksp = sparse.coo_matrix( ( mlarray2np(K['s']).flatten(),
                                    (mlarray2np(K['i']).flatten() -1 ,
                                     mlarray2np(K['j']).flatten() -1  ) 
-                                  ), shape=shape)
+                                  ), shape=shape).tocsr()
     else:
         raise TypeError('The sparse matrix contain just one element and matlab returns just scalar...')
-                              
+    # conversion to csr after creation, faster for computation    
+#    Ksp.tocsr()
+    print(type(Ksp))                          
     return Ksp
 # ============================================================================
 #  M A I N
