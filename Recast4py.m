@@ -42,7 +42,7 @@ for k = 1:nargin
         [ii,jj,ss] = find(varargin{k});
         % conversion to structure (dict in python)
         shape = size(varargin{k})
-        temp = struct('i',int64(ii),'j',int64(jj),'s',ss,'shape',shape);
+        temp = struct('i',int64(ii),'j',int64(jj),'s',ss,'shape',int64(shape));
         varargout{k}=temp;
     else
         % do nothing...
