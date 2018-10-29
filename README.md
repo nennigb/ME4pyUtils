@@ -31,8 +31,8 @@ np_b=mlarray2np(m_b)
 ```
 
 ## Installation
-install ME4P (see matlab documentation)
-Just download or clone the project. Eventually unzip the file and add the folder to matlab and python path.
+ 1. install ME4P (see matlab documentation)
+ 2. Just download or clone the project. Eventually unzip the file and add the folder to matlab and python path.
 
 ## Test and compare speedup with other possibility
 python ME4Putils
