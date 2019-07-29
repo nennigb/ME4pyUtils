@@ -18,10 +18,12 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-
+# import order as its importance with matlab lib...
+import matlab
+import matlab.engine
 import numpy as np
 import scipy.sparse as sparse
-import matlab.engine
+
 
 def mlarray2np(ma):
     """
@@ -65,6 +67,13 @@ def mlarray2np(ma):
     if ma._is_complex==True:  
         nptype='f8'
         npa = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size,order='F') + 1j*np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size,order='F')
+        """
+        # New version avoid some computation, but not copy, due to complex contigous array
+        npa = np.empty(ma.size, dtype=complex)
+        npa.real = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size,order='F')
+        npa.imag = np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size,order='F')
+
+        """
     else:
         # tuple that define type
         mltype=(ma._data.typecode,ma._data.itemsize)
@@ -91,7 +100,69 @@ def mlarray2np(ma):
     return npa
 
 
+def np2mlarray2(npa):
+    """ Conversion of a numpy array to matlab mlarray
+    
+    The conversion is realised without copy
+    
+    npa : numpy array
+          the array to convert
+    Examples :
+    -----------
+    >>>npc=np.array([[1.0,1.1+1j,12],[1+1j,2,100+110j]],dtype=np.complex) # assume C
+    
+    References:
+    -----------
+    https://scipy-lectures.org/advanced/advanced_numpy/
+    
+    """
+    # check numpy
+    if 'ndarray' not in str(type(npa)):
+        raise TypeError('Expect  numpy.ndarray. Got %s' % type(npa))
+    
+    # need to test order 'C' or 'F'
+    
+    # get input size
+    if len(npa.shape)==1:
+        nr,nc= 1, npa.shape[0]
+    elif len(npa.shape)==2:
+        nr,nc = npa.shape
+    elif len(npa.shape)>2: 
+        raise  TypeError('Expect numpy.ndarray of dimension <=2, got %s' % len(npa.shape))
+    
+    
+    # complex case    
+    if npa.dtype in (np.complex128,np.complex):
+         #  create empty matlab.mlarray    
+         ma= matlab.double(initializer=None,  size=(1,nc*nr), is_complex=True)
+         # associate the data
+         ma._real=npa.ravel() # allow to map real and imaginary part continuously!
+       
+    # real case  
+    else:                     
+        # create empty matlab.mlarray
+        if npa.dtype == np.float64:        
+            ma= matlab.double(initializer=None, size=(1,nc*nr), is_complex=False)
+        elif npa.dtype == np.int64:
+            ma= matlab.int64(initializer=None, size=(1,nc*nr))
+        elif npa.dtype == np.bool:
+            ma= matlab.logical(initializer=None, size=(1,nc*nr))
+        else:
+            raise TypeError('Type %s is missing' % npa.dtype)
+        
+        # associate the data
+        ma._data=npa.ravel() 
+        
+    # back to original shape    
+    ma.reshape((nr,nc)) 
+    # array strides are in number of cell (numpy strides are in bytes)
+    ma._strides=[nc,1] # change stride (matlab use 'F' order)
+       
 
+    return ma
+    
+    
+    
 def np2mlarray(npa):
     """
     Convert  numpy array to matlab
@@ -102,13 +173,13 @@ def np2mlarray(npa):
 
     # check input type
     if 'ndarray' not in str(type(npa)):
-        raise TypeError('Expected  numpy.ndarray. Got %s' % type(ma))
+        raise TypeError('Expect  numpy.ndarray. Got %s' % type(ma))
     
-   
+    # need to check 'C' or 'F' order from numpy
     
     # complex case
     # =========================================================================
-    # create empty matlab.mlarray
+    # create empty matlab.mlarray    
     if npa.dtype == np.complex128:
          # convert to array
          arr=np.asarray(npa.flatten('F').real)
@@ -173,12 +244,13 @@ if __name__ == "__main__":
     Test of the module    
     """
     import timeit 
-    speedtest=0   # set to 0 to avoid speed test
+    speedtest=1 # set to 0 to avoid speed test
     
     
 
     
     # Connect to matlab
+    # move into a function
     try:
         eng
     except NameError:
@@ -204,7 +276,7 @@ if __name__ == "__main__":
     
     # Test conversion from matlab to numpy
     # ------------------------------------------------------------------------    
-    npf= mlarray2np(mf)
+    npf= mlarray2np(mf) # no copy, if mf is changed, npf change!
     npc = mlarray2np(mc)
     npi64= mlarray2np(mi64)
     npi8= mlarray2np(mi8)
@@ -237,11 +309,13 @@ if __name__ == "__main__":
             "import matlab\n"
             "import ME4pyUtils\n"
             "import array\n"
-            "np_a=np.random.uniform(size=(1000))\n")
+            "np_a=np.random.uniform(size=(10000))*(.5+0.1236*1j) \n")
         print(' >  matlab.double(np_a.tolist()) =' +
-            str( timeit.timeit('mat_a = matlab.double(np_a.tolist())',setup=setup_np2mat,  number=1000)) + ' s')
+            str( timeit.timeit('mat_a = matlab.double(np_a.real.tolist())',setup=setup_np2mat,  number=100)) + ' s')
         print(' >  ME4pyUtils.np2mlarray(np_a)=' + 
-           str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=1000))+' s')
+           str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=100))+' s')
+        print(' >  ME4pyUtils.np2mlarray2(np_a)=' + 
+           str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray2(np_a)',setup=setup_np2mat,  number=100))+' s')
         
         
         
