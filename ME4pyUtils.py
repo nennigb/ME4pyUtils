@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 # import order as its importance with matlab lib...
+from __future__ import print_function
 import matlab
 import matlab.engine
 import numpy as np
@@ -26,12 +27,26 @@ import scipy.sparse as sparse
 
 
 def mlarray2np(ma):
-    """
-    Convert matlab array to numpy
-    ma : must be a matlab array and return (without copy for real case) a numpy ndarray
-    The np ndarray type depend of the matlab data, /!\ all the type are not ex int8.
-    """
-    # add test si autre type de données int...
+    """ Convert matlab mlarray to numpy array
+
+    The conversion is realised without copy for real data thank to the frombuffer
+    protocol. The np ndarray type depends on the type of matlab data.
+    
+    Paramerters
+    -----------
+    ma : mlarray
+        the matlab array to convert
+    
+    Returns 
+    -------
+    npa : numpy array
+        the converted numpy array 
+        
+    References
+    ----------
+    https://stackoverflow.com/questions/34155829/how-to-efficiently-convert-matlab-engine-arrays-to-numpy-ndarray/34155926
+        
+    """   
     
     # check input type, isintance    
     # if type(ma) is not type(matlab.double()):
@@ -66,14 +81,13 @@ def mlarray2np(ma):
     # conversion using FROM BUFFER, need to be carefull with type
     if ma._is_complex==True:  
         nptype='f8'
-        npa = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size,order='F') + 1j*np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size,order='F')
-        """
-        # New version avoid some computation, but not copy, due to complex contigous array
+        #npa = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size,order='F') + 1j*np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size,order='F')        
+        # New version avoid some computation, but still copy, due to complex contigous array ?
         npa = np.empty(ma.size, dtype=complex)
         npa.real = np.frombuffer(ma._real,dtype=nptype).reshape(ma.size,order='F')
         npa.imag = np.frombuffer(ma._imag,dtype=nptype).reshape(ma.size,order='F')
 
-        """
+
     else:
         # tuple that define type
         mltype=(ma._data.typecode,ma._data.itemsize)
@@ -103,26 +117,39 @@ def mlarray2np(ma):
 def np2mlarray2(npa):
     """ Conversion of a numpy array to matlab mlarray
     
-    The conversion is realised without copy
+    The conversion is realised without copy. First an empty initialization is realized.
+    Then the numpy array is affected to the _data field. Thus the data field is not really an 
+    array.array but a numpy array. Matlab doesn't see anything...
+    With 'F' order input , there is still a copy due to ravel().
     
-    npa : numpy array
-          the array to convert
-    Examples :
+    Paramerters
     -----------
+    npa : numpy array
+        the array to convert
+    Returns 
+    -------
+    ma : mlarray
+        the converted array that can be passe to matlab
+
+    Examples
+    --------
     >>>npc=np.array([[1.0,1.1+1j,12],[1+1j,2,100+110j]],dtype=np.complex) # assume C
     
-    References:
+    References
     -----------
-    https://scipy-lectures.org/advanced/advanced_numpy/
+    https://scipy-lectures.org/advanced/advanced_numpy/ (strides)
     
     """
     # check numpy
     if 'ndarray' not in str(type(npa)):
         raise TypeError('Expect  numpy.ndarray. Got %s' % type(npa))
-    
-    # need to test order 'C' or 'F'
+       
+    # TODO: with 'F' order, there is still a copy due to ravel(); no need to swap the strides...
+    # there is a copy if F order...
+
     
     # get input size
+    # TODO: not hard to generalize to nd>2
     if len(npa.shape)==1:
         nr,nc= 1, npa.shape[0]
     elif len(npa.shape)==2:
@@ -152,7 +179,7 @@ def np2mlarray2(npa):
         
         # associate the data
         ma._data=npa.ravel() 
-        
+        print(ma._data.flags,ma._data,'\n')
     # back to original shape    
     ma.reshape((nr,nc)) 
     # array strides are in number of cell (numpy strides are in bytes)
@@ -164,11 +191,11 @@ def np2mlarray2(npa):
     
     
 def np2mlarray(npa):
-    """
+    """ Deprected!!
     Convert  numpy array to matlab
     npa : must be a numpy ndarray and return (without copy for real case) a matlab mlarray
     For now only double, double complex and int64 and logical have been tested
-    based on https://stackoverflow.com/questions/34155829/how-to-efficiently-convert-matlab-engine-arrays-to-numpy-ndarray/34155926
+    
     """
 
     # check input type
@@ -216,25 +243,35 @@ def np2mlarray(npa):
     
     
 def dict2sparse(K):
-    """
-    Create a scipy sparse CSR matrix using K dictionnary K['i'], K['j'] and K['s'] 
-    contains the row (int64) and column index and the value (double or complex) 
-    respectivelly
+    """Create a scipy sparse CSR matrix from dictionnary
+    
+    Paramerters
+    -----------
+    K : dictionnary K['i'], K['j'] and K['s']  
+        The sparse matrix in the coo format. K['i'], K['j'] constains the row 
+        and column index (int64) and the values K['s']  (double or complex) 
+            
+    Returns 
+    -------
+    Ksp :  sparse.csr_matrix
+        The converted sparse matrix. csr is faster for computation.
+
     """    
     # get shape
     shape=tuple(K['shape']._data)
     # -1 because matlab index start to 1
     if len(K['i']._data)>1:
-        Ksp = sparse.coo_matrix( ( mlarray2np(K['s']).flatten(),
-                                   (mlarray2np(K['i']).flatten() -1 ,
-                                    mlarray2np(K['j']).flatten() -1  ) 
+        Ksp = sparse.coo_matrix( ( mlarray2np(K['s']).ravel(),
+                                   (mlarray2np(K['i']).ravel() -1 ,
+                                    mlarray2np(K['j']).ravel() -1  ) 
                                   ), shape=shape).tocsr()
     else:
-        raise TypeError('The sparse matrix contain just one element and matlab returns just scalar...')
-    # conversion to csr after creation, faster for computation    
-#    Ksp.tocsr()
-    print(type(Ksp))                          
+        raise TypeError('The sparse matrix contains just one element and matlab returns just scalar...')
+        
+                       
     return Ksp
+    
+    
 # ============================================================================
 #  M A I N
 # ============================================================================
@@ -244,8 +281,8 @@ if __name__ == "__main__":
     Test of the module    
     """
     import timeit 
-    speedtest=1 # set to 0 to avoid speed test
-    
+    import scipy as sp
+    speedtest=False # set to True or False to avoid speed test
     
 
     
@@ -276,24 +313,43 @@ if __name__ == "__main__":
     
     # Test conversion from matlab to numpy
     # ------------------------------------------------------------------------    
-    npf= mlarray2np(mf) # no copy, if mf is changed, npf change!
-    npc = mlarray2np(mc)
+    npf= mlarray2np(mf)  # no copy, if mf is changed, npf change!
+    npc = mlarray2np(mc) # still copy for complex (only)
     npi64= mlarray2np(mi64)
     npi8= mlarray2np(mi8)
     npb = mlarray2np(mb)
     
     # Test conversion from numpy to matlab 
     # ------------------------------------------------------------------------
-    npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64)
-    mc2 = np2mlarray(npc)
-    mf2 = np2mlarray(npf)
-    mi64_2 = np2mlarray(npi)   
-    mb2 = np2mlarray(npb)
+    npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64,order='C')
+    mc2 = np2mlarray2(npc)
+    mf2 = np2mlarray2(npf) # copy, because npf has 'F' order (comes from mlarray)
+    mi64_2 = np2mlarray2(npi)   
+    mb2 = np2mlarray2(npb)
 
     # test orientation in the matlab workspace    
     # ------------------------------------------------------------------------
     eng.workspace['mi']=mi64_2
     eng.workspace['mc2']=mc2
+    
+    # no copy 
+    # ------------------------------------------------------------------------
+    # complex
+    npcc =np.array([[1.0,1.1+1j],[1.12+0.13j,22.1,]],dtype=np.complex) # assume C
+    mcc = np2mlarray2(npcc)
+    npcc[0,0]=0.25    
+    print("Are the data reuse ?", "OWNDATA =", mcc._real.flags.owndata, 
+          "same base =", mcc._real.base is npcc, 
+          'if one is modified, the other is modified =', mcc._real[0]==npcc[0,0])
+    
+    # check results
+    # ------------------------------------------------------------------------
+    npcc_inv = sp.linalg.inv(npcc)
+    mcc_inv=eng.inv(mcc)
+    print('Are the inverse of matrix equal ?')
+    print(mcc_inv)
+    print(npcc_inv)
+
     
     # test sparse matrix requiert Recast4py.m
     K1,K2=eng.sptest(3.,nargout=2)
@@ -302,8 +358,8 @@ if __name__ == "__main__":
     
     # Test for speed
     # ------------------------------------------------------------------------
-    if speedtest==1:
-        print( "Compare Numpy to matlab conversion strategy : (a bit long with several matlab.engine opening)")
+    if speedtest:
+        print( "\nCompare Numpy to matlab conversion strategy : (a bit long with several matlab.engine opening)")
         setup_np2mat = (
             "import numpy as np\n"
             "import matlab\n"
@@ -326,15 +382,24 @@ if __name__ == "__main__":
             "import matlab\n"
             "import ME4pyUtils\n"
             "eng = matlab.engine.start_matlab()\n"
-            "mrd = eng.rand(matlab.int64([1,1000]),nargout=1)\n")
+            "mrd = eng.rand(matlab.int64([1,10000]),nargout=1)\n")
         print (' > From np.array :' +
-            str( timeit.timeit('nprd = np.array(mrd,dtype = float) ',setup=setup_tolist,  number=1000)) +
+            str( timeit.timeit('nprd = np.array(mrd,dtype = float) ',setup=setup_tolist,  number=100)) +
             ' s')
     
         print (' > From np.asarray [use _data] :' +
-            str( timeit.timeit('nprd = np.asarray(mrd._data,dtype = float) ',setup=setup_tolist,  number=1000)) +
+            str( timeit.timeit('nprd = np.asarray(mrd._data,dtype = float) ',setup=setup_tolist,  number=100)) +
             ' s')
         
         print (' > From ME4pyUtils.mlarray2np [use _data buffer]:' +
-            str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist,  number=1000)) +
+            str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist,  number=100)) +
+            ' s')
+        setup_tolist_cpx = (
+            "import numpy as np\n"
+            "import matlab\n"
+            "import ME4pyUtils\n"
+            "eng = matlab.engine.start_matlab()\n"
+            "mrd = eng.log(eng.linspace(-1.,1.,10000.))\n")
+        print (' > From ME4pyUtils.mlarray2np [use _data buffer complex]:' +
+            str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist_cpx,  number=100)) +
             ' s')
