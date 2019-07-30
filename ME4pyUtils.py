@@ -150,40 +150,52 @@ def np2mlarray(npa):
     
     # get input size
     # TODO: not hard to generalize to nd>2
-    if len(npa.shape)==1:
-        nr,nc= 1, npa.shape[0]
-    elif len(npa.shape)==2:
-        nr,nc = npa.shape
-    elif len(npa.shape)>2: 
-        raise  TypeError('Expect numpy.ndarray of dimension <=2, got %s' % len(npa.shape))
+#    if len(npa.shape)==1:
+#        nr,nc= 1, npa.shape[0]
+#    elif len(npa.shape)==2:
+#        nr,nc = npa.shape
+#    elif len(npa.shape)>2: 
+#        raise  TypeError('Expect numpy.ndarray of dimension <=2, got %s' % len(npa.shape))
     
-    
+    # get shape    
+    shape = npa.shape
+    # number of elements
+    N= np.prod(shape)
+    # compute strides
+    if npa.flags.c_contiguous==True:
+        strides = _getStridesF(shape)
+        order='C'
+    else:
+        strides = _getStridesF(shape)
+        order='F'
     # complex case    
     if npa.dtype in (np.complex128,np.complex):
          #  create empty matlab.mlarray    
-         ma= matlab.double(initializer=None,  size=(1,nc*nr), is_complex=True)
+         ma= matlab.double(initializer=None,  size=(1,N), is_complex=True)
          # associate the data
-         ma._real=npa.ravel() # allow to map real and imaginary part continuously!
+         ma._real=npa.ravel(order=order) # allow to map real and imaginary part continuously!
        
     # real case  
     else:                     
         # create empty matlab.mlarray
         if npa.dtype == np.float64:        
-            ma= matlab.double(initializer=None, size=(1,nc*nr), is_complex=False)
+            ma= matlab.double(initializer=None, size=(1,N), is_complex=False)
         elif npa.dtype == np.int64:
-            ma= matlab.int64(initializer=None, size=(1,nc*nr))
+            ma= matlab.int64(initializer=None, size=(1,N))
         elif npa.dtype == np.bool:
-            ma= matlab.logical(initializer=None, size=(1,nc*nr))
+            ma= matlab.logical(initializer=None, size=(1,N))
         else:
             raise TypeError('Type %s is missing' % npa.dtype)
         
         # associate the data
-        ma._data=npa.ravel() 
-        print(ma._data.flags,ma._data,'\n')
-    # back to original shape    
-    ma.reshape((nr,nc)) 
+        ma._data=npa.ravel(order=order) 
+#        print(ma._data.flags,ma._data,'\n')
+    # back to original shape   
+    #if len(shape)==1: shape=(1,shape[0])
+    ma.reshape(shape) 
     # array strides are in number of cell (numpy strides are in bytes)
-    ma._strides=[nc,1] # change stride (matlab use 'F' order)
+    #print('strides',strides)
+    ma._strides=strides # change stride (matlab use 'F' order) ie [nc,1] 
        
 
     return ma
@@ -222,6 +234,52 @@ def dict2sparse(K):
     return Ksp
     
     
+def _getStridesF(shape):
+    """Get strides of a F like array, for numpy array need to multiply by itemsize
+    
+    Parameters 
+    ----------
+    shape : tuple of int or iterable
+        shape of the array
+    Returns
+    -------
+    s :  tuple of int or iterable
+        strides of the array
+    References
+    ----------
+    https://docs.scipy.org/doc/numpy/reference/arrays.ndarray.html
+    """
+    # $s_k = \Prod_{j=0}^{k-1} d_j$
+    s=np.cumprod( (1,) + shape[0:-1] )
+ 
+    return s
+    
+def _getStridesC(shape):
+    """Get strides of a C like array, for numpy array need to multiply by itemsize
+    
+    Parameters 
+    ----------
+    shape : tuple of int or iterable
+        shape of the array
+    Returns
+    -------
+    s :  tuple of int or iterable
+        strides of the array
+    References
+    ----------
+    https://docs.scipy.org/doc/numpy/reference/arrays.ndarray.html
+    """
+    # $s_k = \Prod_{j=k+1}^{N-1} d_j with shape[j] <=> d_j
+    N=len(shape)
+    s=[0]*N
+    for k in reversed(range(0,N)):
+        if k==N-1:
+            s[k] = 1
+        else:            
+            s[k] = shape[k+1]*s[k+1]
+    
+    return s
+    
 # ============================================================================
 #  M A I N
 # ============================================================================
@@ -232,7 +290,7 @@ if __name__ == "__main__":
     """
     import timeit 
     import scipy as sp
-    speedtest=False # set to True or False to avoid speed test
+    speedtest=True # set to True or False to avoid speed test
     
 
     
