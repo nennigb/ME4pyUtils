@@ -114,7 +114,7 @@ def mlarray2np(ma):
     return npa
 
 
-def np2mlarray2(npa):
+def np2mlarray(npa):
     """ Conversion of a numpy array to matlab mlarray
     
     The conversion is realised without copy. First an empty initialization is realized.
@@ -190,56 +190,6 @@ def np2mlarray2(npa):
     
     
     
-def np2mlarray(npa):
-    """ Deprected!!
-    Convert  numpy array to matlab
-    npa : must be a numpy ndarray and return (without copy for real case) a matlab mlarray
-    For now only double, double complex and int64 and logical have been tested
-    
-    """
-
-    # check input type
-    if 'ndarray' not in str(type(npa)):
-        raise TypeError('Expect  numpy.ndarray. Got %s' % type(ma))
-    
-    # need to check 'C' or 'F' order from numpy
-    
-    # complex case
-    # =========================================================================
-    # create empty matlab.mlarray    
-    if npa.dtype == np.complex128:
-         # convert to array
-         arr=np.asarray(npa.flatten('F').real)
-         ari=np.asarray(npa.flatten('F').imag)
-         ma= matlab.double(initializer=None, size=(1,len(arr)), is_complex=True)
-         # associate the data
-         ma._real=arr
-         ma._imag=ari
-         # reshape
-         ma.reshape(npa.shape)
-    
-    else:
-        
-        # real case
-        # =========================================================================
-        # convert to array
-        ar=np.asarray(npa.flatten('F'))
-        # create empty matlab.mlarray
-        if npa.dtype == np.float64:        
-            ma= matlab.double(initializer=None, size=(1,len(ar)), is_complex=False)
-        elif npa.dtype == np.int64:
-            ma= matlab.int64(initializer=None, size=(1,len(ar)))
-        elif npa.dtype == np.bool:
-            ma= matlab.logical(initializer=None, size=(1,len(ar)))
-        else:
-            raise TypeError('Type is missing')
-        
-        # assocaite data
-        ma._data=ar
-        # reshape
-        ma.reshape(npa.shape)
-    
-    return ma
     
     
 def dict2sparse(K):
@@ -322,25 +272,25 @@ if __name__ == "__main__":
     # Test conversion from numpy to matlab 
     # ------------------------------------------------------------------------
     npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64,order='C')
-    mc2 = np2mlarray2(npc)
-    mf2 = np2mlarray2(npf) # copy, because npf has 'F' order (comes from mlarray)
-    mi64_2 = np2mlarray2(npi)   
-    mb2 = np2mlarray2(npb)
+    mc2 = np2mlarray(npc)
+    mf2 = np2mlarray(npf) # copy, because npf has 'F' order (comes from mlarray)
+    mi64_2 = np2mlarray(npi)   
+    mb2 = np2mlarray(npb)
 
     # test orientation in the matlab workspace    
     # ------------------------------------------------------------------------
     eng.workspace['mi']=mi64_2
     eng.workspace['mc2']=mc2
     
-    # no copy 
+    # no copy check
     # ------------------------------------------------------------------------
     # complex
     npcc =np.array([[1.0,1.1+1j],[1.12+0.13j,22.1,]],dtype=np.complex) # assume C
-    mcc = np2mlarray2(npcc)
+    mcc = np2mlarray(npcc)
     npcc[0,0]=0.25    
-    print("Are the data reuse ?", "OWNDATA =", mcc._real.flags.owndata, 
+    print("Are the data reuse ?", ", OWNDATA =", mcc._real.flags.owndata, 
           "same base =", mcc._real.base is npcc, 
-          'if one is modified, the other is modified =', mcc._real[0]==npcc[0,0])
+          ', If one is modified, the other is modified =', mcc._real[0]==npcc[0,0])
     
     # check results
     # ------------------------------------------------------------------------
@@ -370,8 +320,6 @@ if __name__ == "__main__":
             str( timeit.timeit('mat_a = matlab.double(np_a.real.tolist())',setup=setup_np2mat,  number=100)) + ' s')
         print(' >  ME4pyUtils.np2mlarray(np_a)=' + 
            str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=100))+' s')
-        print(' >  ME4pyUtils.np2mlarray2(np_a)=' + 
-           str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray2(np_a)',setup=setup_np2mat,  number=100))+' s')
         
         
         
