@@ -25,13 +25,14 @@ import numpy as np
 
 # start matlab
 eng = matlab.engine.start_matlab()
-# conversion to matlab
+# conversion to matlab type before using it in matlab
 np_a = np.random.uniform(size=(1000))
 m_a = ME.np2mlarray(np_a)
-# conversion to numpy
+eng.std(m_a)
+# conversion to numpy type before using it in python
 m_b = eng.rand(matlab.int64([1,1000]))
 np_b = ME.mlarray2np(m_b)
-
+np.std(np_b)
 ```
 
 Note that if copies of the array are needed, it can be done using `copy` module or `np.copy`.
@@ -48,24 +49,24 @@ Note that if copies of the array are needed, it can be done using `copy` module 
 ## Frequent issues with MATLAB Engine API
 
 MATLAB Engine API for Python dislikes :
-  - The calls of a matlab function with integer parameters instead of float. These parameters cast to long integer and will mislead matlab with int64
+  - Calling a matlab function with integer parameters instead of float. These parameters are casted into long integer and will mislead matlab with int64
 ```
 eng.sqrt(1)  # will crash
 eng.sqrt(1.) # works
 eng.mod(5,2) # works because integer are expected from matlab
-
 ```
-  - returning more than one output without explicitly set `nargout`
+  - Returning more than one output, without explicitly set `nargout`
 ```
 s,id = eng.sort(np2mlarray(np.array([1.1,3.300,2.01])),nargout=2)  # works, id (index) is a double array...
 s,id = eng.sort(np2mlarray(np.array([1.1,3.300,2.01])))  # crash
 ```
-  - mlarray2np(np2mlarray(np_array)) # crash TypeError: expected a single-segment buffer object; 
 
 
 ## Alternatives
 The propose approach use MATLAB Engine API for Python, but other projects have been proposed, and use numpy nativelly.
 
 [Transplant](https://github.com/bastibe/transplant) (socket communication)
+
 [Oct2py](https://github.com/blink1073/oct2py) (mat-file communication, possible to speed up with RAM drive (tmpfs) by seting `temp_dir` properly)
+
 [mlab](https://github.com/ewiger/mlab)
