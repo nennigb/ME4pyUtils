@@ -16,6 +16,16 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+Examples
+--------
+>>> mc=matlab.double([[(1+1j),(0.3+0j),1j],[(-1+1.2j),0j,(1+1j)]], is_complex=True)
+>>> np2mlarray(mlarray2np(mc))==mc
+True
+
+>>> npc=np.array([[1,2+0.2j,3],[4,5,6],[7,8,9],[10+0.1j,11,12]],dtype=np.complex,order='C')
+>>> np.all(mlarray2np(np2mlarray(npc))==npc)
+True
 """
 
 # import order as its importance with matlab lib...
@@ -42,6 +52,26 @@ def mlarray2np(ma):
     npa : numpy array
         the converted numpy array 
         
+    Examples
+    --------
+    Complex 2D array
+    >>> mc=matlab.double([[(1+1j),(0.3+0j),1j],[(-1+1.2j),0j,(1+1j)]], is_complex=True)
+    >>> mlarray2np(mc)
+    array([[ 1. +1.j ,  0.3+0.j ,  0. +1.j ],
+           [-1. +1.2j,  0. +0.j ,  1. +1.j ]])
+
+    >>> m3 = matlab.double([[[1.0,10.0],[2.0,20.0],[3.0,30.0]],[[4.0,40.0],[5.0,50.0],[6.0,60.0]]])
+    >>> np3 = mlarray2np(m3) 
+    >>> np3[...,0]
+    array([[1., 2., 3.],
+           [4., 5., 6.]])
+    >>> np3[...,1]
+    array([[10., 20., 30.],
+           [40., 50., 60.]])
+    >>> np3.flags['OWNDATA'] # no copy
+    False
+
+
     References
     ----------
     https://stackoverflow.com/questions/34155829/how-to-efficiently-convert-matlab-engine-arrays-to-numpy-ndarray/34155926
@@ -110,17 +140,17 @@ def mlarray2np(ma):
             
         # no copy with the buffer
         npa = np.frombuffer(ma._data,dtype=nptype).reshape(ma.size,order='F')
-        
+       
     return npa
 
 
 def np2mlarray(npa):
     """ Conversion of a numpy array to matlab mlarray
     
-    The conversion is realised without copy. First an empty initialization is realized.
+    The conversion is realised without copy for real data. First an empty initialization is realized.
     Then the numpy array is affected to the _data field. Thus the data field is not really an 
     array.array but a numpy array. Matlab doesn't see anything...
-    With 'F' order input , there is still a copy due to ravel().
+    For complex data, the strides seems to not work properly with matlab.double.
     
     Paramerters
     -----------
@@ -133,7 +163,18 @@ def np2mlarray(npa):
 
     Examples
     --------
-    >>>npc=np.array([[1.0,1.1+1j,12],[1+1j,2,100+110j]],dtype=np.complex) # assume C
+    >>> npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64,order='C')
+    >>> np2mlarray(npi)
+    matlab.int64([[1,2,3],[4,5,6],[7,8,9],[10,11,12]])
+    >>> npif=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64,order='F')
+    >>> np2mlarray(npif)
+    matlab.int64([[1,2,3],[4,5,6],[7,8,9],[10,11,12]])
+    
+    >>> npcf=np.array([[1,2+0.2j,3],[4,5,6],[7,8,9],[10+0.1j,11,12]],dtype=np.complex,order='F')
+    >>> np2mlarray(npcf)
+    matlab.double([[(1+0j),(2+0.2j),(3+0j)],[(4+0j),(5+0j),(6+0j)],[(7+0j),(8+0j),(9+0j)],[(10+0.1j),(11+0j),(12+0j)]], is_complex=True)
+
+
     
     References
     -----------
@@ -143,38 +184,34 @@ def np2mlarray(npa):
     # check numpy
     if 'ndarray' not in str(type(npa)):
         raise TypeError('Expect  numpy.ndarray. Got %s' % type(npa))
-       
-    # TODO: with 'F' order, there is still a copy due to ravel(); no need to swap the strides...
-    # there is a copy if F order...
-
-    
-    # get input size
-    # TODO: not hard to generalize to nd>2
-#    if len(npa.shape)==1:
-#        nr,nc= 1, npa.shape[0]
-#    elif len(npa.shape)==2:
-#        nr,nc = npa.shape
-#    elif len(npa.shape)>2: 
-#        raise  TypeError('Expect numpy.ndarray of dimension <=2, got %s' % len(npa.shape))
-    
+                
     # get shape    
     shape = npa.shape
     # number of elements
     N= np.prod(shape)
-    # compute strides
-    if npa.flags.c_contiguous==True:
-        strides = _getStridesF(shape)
-        order='C'
-    else:
-        strides = _getStridesF(shape)
+    # compute strides (real case)
+    if npa.flags.f_contiguous==True:
+        strides = _getStridesF(shape) # pour la sortie
         order='F'
+    else:
+        strides = _getStridesC(shape) # ok, garde le même
+        order='C'
+        
+            
     # complex case    
     if npa.dtype in (np.complex128,np.complex):
          #  create empty matlab.mlarray    
          ma= matlab.double(initializer=None,  size=(1,N), is_complex=True)
          # associate the data
+         """
+         # associate the data (no copy), works on 2D array only...
          ma._real=npa.ravel(order=order) # allow to map real and imaginary part continuously!
-       
+         """
+         cpx=npa.ravel(order='F') # copy except for fortran like array
+         ma._real=cpx.real.ravel() # second ravel to correct the strides 18->8
+         ma._imag=cpx.imag.ravel()                  
+         ma.reshape(shape) 
+         # ma._strides=strides 
     # real case  
     else:                     
         # create empty matlab.mlarray
@@ -189,18 +226,17 @@ def np2mlarray(npa):
         
         # associate the data
         ma._data=npa.ravel(order=order) 
-#        print(ma._data.flags,ma._data,'\n')
-    # back to original shape   
-    #if len(shape)==1: shape=(1,shape[0])
-    ma.reshape(shape) 
-    # array strides are in number of cell (numpy strides are in bytes)
-    #print('strides',strides)
-    ma._strides=strides # change stride (matlab use 'F' order) ie [nc,1] 
-       
+        # print(ma._data.flags,ma._data,'\n') # control owner
+        
+        # back to original shape   
+        ma.reshape(shape)  
+        # array strides are in number of cell (numpy strides are in bytes)
+        # if len(shape)==1 no need to change. Format pb because _stride expect (1,1) and stride = (1,)
+        if len(shape)>1:
+            ma._strides=strides # change stride (matlab use 'F' order ie [nc,1] )
 
+        
     return ma
-    
-    
     
     
     
@@ -245,17 +281,24 @@ def _getStridesF(shape):
     -------
     s :  tuple of int or iterable
         strides of the array
+    
+    Examples
+    --------
+    >>> _getStridesF((2, 3, 3))
+    [1, 2, 6]
+    
     References
     ----------
     https://docs.scipy.org/doc/numpy/reference/arrays.ndarray.html
     """
+    
     # $s_k = \Prod_{j=0}^{k-1} d_j$
-    s=np.cumprod( (1,) + shape[0:-1] )
+    s=np.cumprod( (1,) + shape[0:-1] ).tolist()
  
     return s
     
 def _getStridesC(shape):
-    """Get strides of a C like array, for numpy array need to multiply by itemsize
+    """Get strides of a C like array. For numpy array need to be multiply by itemsize
     
     Parameters 
     ----------
@@ -265,12 +308,20 @@ def _getStridesC(shape):
     -------
     s :  tuple of int or iterable
         strides of the array
+        
+    Examples
+    --------
+    >>> _getStridesC((2, 3, 3))
+    [9, 3, 1]
+
     References
     ----------
     https://docs.scipy.org/doc/numpy/reference/arrays.ndarray.html
     """
-    # $s_k = \Prod_{j=k+1}^{N-1} d_j with shape[j] <=> d_j
+    
     N=len(shape)
+
+    # $s_k = \Prod_{j=k+1}^{N-1} d_j$ with shape[j] <=> $d_j$
     s=[0]*N
     for k in reversed(range(0,N)):
         if k==N-1:
@@ -279,6 +330,17 @@ def _getStridesC(shape):
             s[k] = shape[k+1]*s[k+1]
     
     return s
+
+def _test():
+    """ run test procedure with doctest
+    """    
+    import doctest
+    # invoke the testmod function to run tests contained in docstring
+    stats=doctest.testmod()
+    print(stats)
+    return stats
+
+    
     
 # ============================================================================
 #  M A I N
@@ -286,14 +348,19 @@ def _getStridesC(shape):
 
 if __name__ == "__main__":
     """ 
-    Test of the module    
+    Test of the module 
+    
+    It runs the doctest and create other tests with matlab engine calls.
+    If speedtest==True, it runs time comparisons with other conversions strategies.
     """
     import timeit 
     import scipy as sp
-    speedtest=True # set to True or False to avoid speed test
+    import scipy.linalg as spl
+    speedtest=False # set to True or False to avoid speed test
     
-
-    
+    # Test module
+    _test()
+        
     # Connect to matlab
     # move into a function
     try:
@@ -310,6 +377,7 @@ if __name__ == "__main__":
     else:
          print('Matlab engine is already runnig...')
        
+    print('Further tests....\n')
     
     # create matlab data
     # ------------------------------------------------------------------------
@@ -329,7 +397,8 @@ if __name__ == "__main__":
     
     # Test conversion from numpy to matlab 
     # ------------------------------------------------------------------------
-    npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64,order='C')
+    npi=np.array([[1,2,3],[4,5,6],[7,8,9],[10,11,12]],dtype=np.int64,order='F')
+    mi = np2mlarray(npi)
     mc2 = np2mlarray(npc)
     mf2 = np2mlarray(npf) # copy, because npf has 'F' order (comes from mlarray)
     mi64_2 = np2mlarray(npi)   
@@ -340,33 +409,37 @@ if __name__ == "__main__":
     eng.workspace['mi']=mi64_2
     eng.workspace['mc2']=mc2
     
-    # no copy check
-    # ------------------------------------------------------------------------
-    # complex
-    npcc =np.array([[1.0,1.1+1j],[1.12+0.13j,22.1,]],dtype=np.complex) # assume C
-    mcc = np2mlarray(npcc)
-    npcc[0,0]=0.25    
-    print("Are the data reuse ?", ", OWNDATA =", mcc._real.flags.owndata, 
-          "same base =", mcc._real.base is npcc, 
-          ', If one is modified, the other is modified =', mcc._real[0]==npcc[0,0])
     
     # check results
     # ------------------------------------------------------------------------
-    npcc_inv = sp.linalg.inv(npcc)
+    npcc =np.array([[1.0,1.1+1j],[1.12+0.13j,22.1,]],dtype=np.complex) # assume C
+    mcc = np2mlarray(npcc)
+    npcc_inv = spl.inv(npcc)
     mcc_inv=eng.inv(mcc)
     print('Are the inverse of matrix equal ?')
     print(mcc_inv)
     print(npcc_inv)
 
+#    # no copy check
+#    # ------------------------------------------------------------------------
+#    # complex
+#    
+#    npcc[0,0]=0.25    
+#    print("Are the data reuse ?", ", OWNDATA =", mcc._real.flags.owndata, 
+#          "same base =", mcc._real.base is npcc, 
+#          ', If one is modified, the other is modified =', mcc._real[0]==npcc[0,0])
+#    
     
     # test sparse matrix requiert Recast4py.m
     K1,K2=eng.sptest(3.,nargout=2)
     Ksp1=dict2sparse(K1)
     Ksp2=dict2sparse(K2)
     
+    
     # Test for speed
     # ------------------------------------------------------------------------
     if speedtest:
+        # Numpy to matlab
         print( "\nCompare Numpy to matlab conversion strategy : (a bit long with several matlab.engine opening)")
         setup_np2mat = (
             "import numpy as np\n"
@@ -374,14 +447,14 @@ if __name__ == "__main__":
             "import ME4pyUtils\n"
             "import array\n"
             "np_a=np.random.uniform(size=(10000))*(.5+0.1236*1j) \n")
-        print(' >  matlab.double(np_a.tolist()) =' +
+        print(' > From matlab.double(np_a.tolist()) : ' +
             str( timeit.timeit('mat_a = matlab.double(np_a.real.tolist())',setup=setup_np2mat,  number=100)) + ' s')
-        print(' >  ME4pyUtils.np2mlarray(np_a)=' + 
+        print(' > From ME4pyUtils.np2mlarray [use pre alloc] : ' + 
            str(timeit.timeit('mat_a = ME4pyUtils.np2mlarray(np_a)',setup=setup_np2mat,  number=100))+' s')
         
         
         
-        
+        # Matlab to numpy
         print ("\nCompare matlab to numpy conversition strategy :")
         setup_tolist = (
             "import numpy as np\n"
@@ -389,15 +462,15 @@ if __name__ == "__main__":
             "import ME4pyUtils\n"
             "eng = matlab.engine.start_matlab()\n"
             "mrd = eng.rand(matlab.int64([1,10000]),nargout=1)\n")
-        print (' > From np.array :' +
+        print (' > From np.array : ' +
             str( timeit.timeit('nprd = np.array(mrd,dtype = float) ',setup=setup_tolist,  number=100)) +
             ' s')
     
-        print (' > From np.asarray [use _data] :' +
+        print (' > From np.asarray [use _data] : ' +
             str( timeit.timeit('nprd = np.asarray(mrd._data,dtype = float) ',setup=setup_tolist,  number=100)) +
             ' s')
         
-        print (' > From ME4pyUtils.mlarray2np [use _data buffer]:' +
+        print (' > From ME4pyUtils.mlarray2np [use _data buffer] : ' +
             str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist,  number=100)) +
             ' s')
         setup_tolist_cpx = (
@@ -406,6 +479,6 @@ if __name__ == "__main__":
             "import ME4pyUtils\n"
             "eng = matlab.engine.start_matlab()\n"
             "mrd = eng.log(eng.linspace(-1.,1.,10000.))\n")
-        print (' > From ME4pyUtils.mlarray2np [use _data buffer complex]:' +
+        print (' > From ME4pyUtils.mlarray2np [use _real _imag buffer complex] : ' +
             str(timeit.timeit('nprd = ME4pyUtils.mlarray2np(mrd) ',setup=setup_tolist_cpx,  number=100)) +
             ' s')
