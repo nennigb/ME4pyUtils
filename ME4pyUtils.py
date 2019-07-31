@@ -26,6 +26,7 @@ True
 >>> npc=np.array([[1,2+0.2j,3],[4,5,6],[7,8,9],[10+0.1j,11,12]],dtype=np.complex,order='C')
 >>> np.all(mlarray2np(np2mlarray(npc))==npc)
 True
+
 """
 
 # import order as its importance with matlab lib...
